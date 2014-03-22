@@ -29,6 +29,7 @@ import glob
 import tarfile
 import zipfile
 from collections import defaultdict
+import getpass
 import errno
 
 assignments = defaultdict(list)

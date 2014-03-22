@@ -19,8 +19,73 @@
 
 import os
 import re
-import mechanize, urllib, urllib2
-import sys, os, shutil, getpass, glob, subprocess
+import mechanize
+import urllib2
+import sys
+import shutil
+import subprocess
+import urlparse
+import glob
+import tarfile
+import zipfile
+from collections import defaultdict
+import errno
+
+assignments = defaultdict(list)
+
+def extract_asssignments(dirs):
+  for dir in dirs:
+      print("+ Extracting a submission into {}".format(dir))
+      path = dir
+      os.chdir(path)
+      listing = glob.glob(path+'/*gz')
+      for file in listing:
+          print(" |- Extracting archive ...{0}".format(file))
+          subprocess.call(["tar", "xzvf", file], stdout=subprocess.PIPE)
+
+      listing = glob.glob(path+'/*bz')
+      for file in listing:
+          print(" |- Extracting archive ...{0}".format(file))
+          subprocess.call(["tar", "xjvf", file], stdout=subprocess.PIPE)
+
+      listing = glob.glob(path+'/*zip')
+      for file in listing:
+          print(" |- Extracting archive ...{0}".format(file))
+          subprocess.call(["unzip", "-o", file], stdout=subprocess.PIPE)
+
+      listing = glob.glob(path+'/*rar')
+      for file in listing:
+          print(" |- Extracting archive ...{0}".format(file))
+          subprocess.call(["unrar", "x", "-o+", file], stdout=subprocess.PIPE)
+
+      listing = glob.glob(path+'/*tar')
+      for file in listing:
+          print(" |- Extracting archive ...{0}".format(file))
+          subprocess.call(["tar", "xvf", file], stdout=subprocess.PIPE)
+
+
+def unzipAssignemnetFile(inputFile, curDir):
+    ''' Unzip the large file downloaded from moodle'''
+    with zipfile.ZipFile(inputFile, "r") as myzip:
+        listobj = myzip.infolist()
+        filesToExtract = list()
+        for obj in listobj:
+            zippedFile = obj.filename
+            filename = zippedFile.split("_")
+            studentName = filename[0].strip()
+            file = filename[1]
+            assignments[studentName].append(file)
+            path = os.path.join(curDir, studentName)
+            try:
+                os.makedirs(path)
+            except OSError as exception:
+                if exception.errno != errno.EEXIST:
+                    raise  exception
+            myzip.extract(zippedFile, path)
+            pathToExtract= os.path.join(curDir, studentName, zippedFile)
+            filesToExtract.append(path)
+        extract_asssignments(filesToExtract)
+        
 
 class Moodle():
 
@@ -152,7 +217,6 @@ class Moodle():
     
     def printAvailableLinks(self):
         ''' Print all available links on the page'''
-        print("ERROR: Failed to find the given link")
         print("+ Available links are ")
         for l in self.br.links():
             print("|- {}".format(l.url))
@@ -193,17 +257,32 @@ class Moodle():
         except Exception as e:
             print("|- Looks like course page is not at usual place. Guessing")
 
+    def followLink(self, text_regex=None, url_regex=None):
+        res = None
+        if text_regex:
+            try:
+                res = self.br.follow_link(text_regex=text_regex)
+            except Exception as e:
+                print("ERROR: Failed to find link {}".format(text_regex))
+                self.printAvailableLinks()
+                sys.exit()
+        elif url_regex:
+            try: 
+               res = self.br.follow_link(url_regex=url_regex)
+            except Exception as e:
+                print("ERROR: Failed to find link {}".format(url_regex))
+                self.printAvailableLinks()
+                sys.exit(0)
+        assert(res is not None)
+        print("\t...Success. Currently on:: '{}'".format(self.br.title()))
+        return res
+
     def get_course_page(self):
 
         # We can handle both course name and id.
-        print(" |- Acquiring course page for {}".format(self.course_key))
+        print("|- Acquiring course page for {}".format(self.course_key))
         if self.course_key.isdigit() == False :
-            try:
-                self.course = self.br.follow_link(text_regex=self.course_key)
-            except Exception as e:
-                self.printAvailableLinks()
-                sys.exit(0)
-                
+            self.course = self.followLink(text_regex=self.course_key)
             course_url = self.course.geturl()
             [url, id ] = course_url.split('id=')
             self.course_id = id
@@ -212,129 +291,34 @@ class Moodle():
             course_url = self.course.geturl()
             self.course_id = self.course_key 
 
-
-    def goto_main_activity(self):
+    def goto_main_activity(self): 
         self.activity_id = []
-        if self.download == 'true':
-            print (" |- Acquiring page of activity: {}".format(
-                self.activity_name)
-                )
-            try:
-                activity_res = self.br.follow_link(text_regex=self.activity_name)
-            except Exception as e:
-                self.printAvailableLinks()
-                sys.exit(0)
-
-            assert self.br.viewing_html()
-            print self.br.title()
-            print self.br.geturl()
-            
-            for act in self.activities :
-                act_res = self.br.follow_link(text_regex=act)
-                act_url = act_res.geturl()
-                [url, act_id] = act_url.split('id=')
-                self.activity_id.append(act_id)
-                view_act_res = self.br.follow_link(text_regex=r".*(Download all).*")
-                print("Successfully downloaded data for this activity!")
-                self.br.open(activity_res.geturl())
-            else:
-                print("Option variable \"Download\" is not true")
-
-    def fetch_activity_links(self, link_res):
-        self.user_dict = dict()
-        """ Fetch user_id from the links. """
-        for link in self.br.links(url_regex="course="+self.course_id):
-            user_url = link.url
-            [url, user_course_id] = user_url.split("id=")
-            [user_id, rest] = user_course_id.split("&course")
-            self.user_dict[user_id] = [link.text,""]
-
-        """ For each user, fetch its assignement, if submitted. """
-        for user in self.user_dict.keys():
-            for link in self.br.links(url_regex=user):
-                file_format = ['.tar', '.gz', '.zip', '.rar', '.7z', '.bz']
-                found = False;
-                for format in file_format:
-                    if link.url.endswith(format) == True:
-                        found = True
-                        ''' Only update the url. '''
-                        self.user_dict[user][1] =  link.url
-                        self.num_assignment = self.num_assignment + 1
-
-                    else:
-                        found = False
-
+        print ("|- Acquiring page of activity: {}".format(self.activity_name))
+        activity_res = self.followLink(text_regex=self.activity_name)
+        assert self.br.viewing_html()
+        for l in self.br.links():
+            if l.text == "Download all submissions":
+                print("|- Downloading all submission in single zip file")
+                fileName = os.path.join(self.root_dir
+                        , self.activity_name+".zip")
+                loc = self.br.retrieve(l.url, fileName)
+                if os.path.isfile(fileName):
+                    print("\t...Successfully downloaded {}".format(fileName))
+                    return fileName
+                else:
+                    print("FATAL: Can't download data-file")
+                    sys.exit()
     
     def download_data(self) :
         self.dir = "./Moodle"
-        self.goto_main_activity()
+        zipFile = self.goto_main_activity()
+        if self.extract == "true":
+            print("|- Extracting submissions")
+            unzipAssignemnetFile(zipFile, self.root_dir)
+        else:
+            print("Not extracting the zip file {}".format(zipFile))
 
-    def download_files(self, act) :
-        down_dir = self.root_dir +"/"+act
-        if not os.path.exists(down_dir) :
-            os.makedirs(down_dir)
-        print(" |- Setting download directory to " + down_dir)
-        for user in self.user_dict.keys() :
-            if self.user_dict[user] == '':
-                print('No submission found for {1}'.format(user))
-            else :
-                url = self.user_dict[user][1]
-                if url == '':
-                    pass
-                else:
-                    temp_dir = down_dir+"/"+self.user_dict[user][0]
-                    
-                    if not os.path.exists(temp_dir):
-                        os.makedirs(temp_dir)
-                    else:
-                        print(" ** WARNING ** Path already exists.. Deleting ..")
-                        if os.path.isdir(temp_dir):
-                            shutil.rmtree(temp_dir) # remove dir
-                            os.makedirs(temp_dir) # and create new one
-                        else:
-                            os.remove(temp_dir) # remove file.
-                            os.makedirs(temp_dir) # create dir
-
-                    print("Downloading submission of  "+self.user_dict[user][0])
-                    loc = self.br.retrieve(url)[0]
-                    shutil.move(loc,temp_dir) 
-                    if self.extract == 'true':
-                        self.extract_asssignments(temp_dir)
-                    else:
-                        pass
-
-    def extract_asssignments(self, dir):
         
-        path = dir
-        if not os.path.isdir(path):
-            shutil.rmtree(dir)
-        
-        os.chdir(path)
-        listing = glob.glob(path+'/*gz')
-        for file in listing:
-            print " |- Extracting archive ...{0}".format(file)
-            subprocess.call(["tar", "xzvf", file], stdout=subprocess.PIPE)
-
-        listing = glob.glob(path+'/*bz')
-        for file in listing:
-            print " |- Extracting archive ...{0}".format(file)
-            subprocess.call(["tar", "xjvf", file], stdout=subprocess.PIPE)
-
-        listing = glob.glob(path+'/*zip')
-        for file in listing:
-            print " |- Extracting archive ...{0}".format(file)
-            subprocess.call(["unzip", "-o", file], stdout=subprocess.PIPE)
-
-        listing = glob.glob(path+'/*rar')
-        for file in listing:
-            print " |- Extracting archive ...{0}".format(file)
-            subprocess.call(["unrar", "x", "-o+", file], stdout=subprocess.PIPE)
-                   
-        listing = glob.glob(path+'/*tar')
-        for file in listing:
-            print " |- Extracting archive ...{0}".format(file)
-            subprocess.call(["tar", "xvf", file], stdout=subprocess.PIPE)
-         
 if __name__ == "__main__":
 
     moodle = Moodle()
@@ -345,7 +329,6 @@ if __name__ == "__main__":
         moodle.reachCoursePage()
         moodle.get_course_page()
         moodle.download_data()
-        print 'Total {0} assignments have been downloaded to {1}'\
-            .format(moodle.num_assignment, moodle.root_dir)
+        print("All done")
     else : pass
 

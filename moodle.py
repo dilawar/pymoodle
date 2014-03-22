@@ -7,6 +7,9 @@
     Email : dilawar@ee.iitb.ac.in
     Log : Created on Feb 16, 2012
 
+        Saturday 22 March 2014 08:02:49 PM IST
+        Changed to work with http://moodle.lyceejeanbart.fr/
+
     ABOUT : This module fetch assignements from moodle course page as specified
     in its configuration file .moodlerc which must be located in user home
     folder. See this file for options.
@@ -174,6 +177,14 @@ class Moodle():
             else:
                 form_id = form_id + 1;
 
+
+    def reachCoursePage(self):
+        print("|- Figuring out the page where courses are listed for user")
+        try:
+            self.br.follow_link(text_regex='My courses')
+        except Exception as e:
+            print("|- Looks like course page is not at usual place. Guessing")
+
     def get_course_page(self):
 
         # We can handle both course name and id.
@@ -316,16 +327,17 @@ class Moodle():
             print " |- Extracting archive ...{0}".format(file)
             subprocess.call(["tar", "xvf", file], stdout=subprocess.PIPE)
          
+if __name__ == "__main__":
 
+    moodle = Moodle()
+    moodle.read_configuration()
 
-moodle = Moodle()
-moodle.read_configuration()
-
-if moodle.download == "true" :
-    moodle.make_connection()
-    moodle.get_course_page()
-    moodle.download_data()
-    print 'Total {0} assignments have been downloaded to {1}'\
-        .format(moodle.num_assignment, moodle.root_dir)
-else : pass
+    if moodle.download == "true" :
+        moodle.make_connection()
+        moodle.reachCoursePage()
+        moodle.get_course_page()
+        moodle.download_data()
+        print 'Total {0} assignments have been downloaded to {1}'\
+            .format(moodle.num_assignment, moodle.root_dir)
+    else : pass
 

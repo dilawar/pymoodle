@@ -1,0 +1,15 @@
+# This is a configuration file for moodle.py application.
+# If you are in doubt, email to 
+# dilawar@ee.iitb.ac.in
+# usename is your moddle username.
+# password is your moddle password.
+#
+url = http://moodle.lyceejeanbart.fr/login/index.php
+username = zzdilawar
+password = my_password
+proxy = true
+course = MPSDEM2013
+activities = Fiches de trivial
+# It must end with / character.
+downloaddir = /tmp/
+extract = true

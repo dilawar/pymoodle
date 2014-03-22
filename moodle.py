@@ -35,7 +35,7 @@ assignments = defaultdict(list)
 
 def extract_asssignments(dirs):
   for dir in dirs:
-      print("+ Extracting a submission into {}".format(dir))
+      print("+ Extracting a submission into {}".format(dir.encode('utf-8')))
       path = dir
       os.chdir(path)
       listing = glob.glob(path+'/*gz')

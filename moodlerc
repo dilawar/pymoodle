@@ -1,6 +1,7 @@
-# This is a configuration file for moodle.py application.
-# If you are in doubt, email to 
-# dilawar@ee.iitb.ac.in
+# This is a configuration file for moodle.py application. Save it as
+# ~/.moodlerc.
+#
+# If you are in doubt, email to dilawar.s.rajput@gmail.com
 # usename is your moddle username.
 # password is your moddle password.
 #

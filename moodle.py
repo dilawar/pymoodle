@@ -146,8 +146,16 @@ class Moodle():
                    self.cxx = val.split()[0]
 
                 else :
-                     print "Unknow configuration variable {0}..  Ignoring.".format(key.split()[0])
-
+                     print("Unknow configuration variable {0}.".format(
+                         key.split()[0])
+                         )
+    
+    def printAvailableLinks(self):
+        ''' Print all available links on the page'''
+        print("ERROR: Failed to find the given link")
+        print("+ Available links are ")
+        for l in self.br.links():
+            print("|- {}".format(l.url))
 
     def make_connection(self):
         if self.proxy != "false" :
@@ -188,15 +196,14 @@ class Moodle():
     def get_course_page(self):
 
         # We can handle both course name and id.
+        print(" |- Acquiring course page for {}".format(self.course_key))
         if self.course_key.isdigit() == False :
             try:
                 self.course = self.br.follow_link(text_regex=self.course_key)
             except Exception as e:
-                print("Failed to find the given link")
-                print("+ Available links are ")
-                for l in self.br.links():
-                    print(l.url)
-
+                self.printAvailableLinks()
+                sys.exit(0)
+                
             course_url = self.course.geturl()
             [url, id ] = course_url.split('id=')
             self.course_id = id
@@ -205,18 +212,19 @@ class Moodle():
             course_url = self.course.geturl()
             self.course_id = self.course_key 
 
-        print(" |- Acquiring course page ...")
 
     def goto_main_activity(self):
         self.activity_id = []
         if self.download == 'true':
-            print (" |- Acquiring link of activity ... ")
-            #print self.activity_name
-            print self.br.geturl()
-            #print self.br.title()
-            #for link in self.br.links() :
-            #    print link.text, link.url
-            activity_res = self.br.follow_link(text_regex=self.activity_name)
+            print (" |- Acquiring page of activity: {}".format(
+                self.activity_name)
+                )
+            try:
+                activity_res = self.br.follow_link(text_regex=self.activity_name)
+            except Exception as e:
+                self.printAvailableLinks()
+                sys.exit(0)
+
             assert self.br.viewing_html()
             print self.br.title()
             print self.br.geturl()
